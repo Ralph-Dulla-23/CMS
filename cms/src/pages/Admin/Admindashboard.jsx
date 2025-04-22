@@ -338,6 +338,7 @@ function AdminDashboard() {
         setSessionTypesData(sessionData);
         
         // Set chart options
+        // Set chart options with more robust tooltip handling
         setChartOptions({
           scales: {
             y: {
@@ -355,14 +356,23 @@ function AdminDashboard() {
             tooltip: {
               callbacks: {
                 label: function(context) {
-                  let label = context.dataset.label || '';
-                  if (label) {
-                    label += ': ';
+                  // For pie charts
+                  if (context.chart.config.type === 'pie') {
+                    const label = context.label || '';
+                    const value = context.parsed || context.raw || 0;
+                    return `${label}: ${value}`;
+                  } 
+                  // For bar charts
+                  else {
+                    let label = context.dataset.label || '';
+                    if (label) {
+                      label += ': ';
+                    }
+                    if (context.parsed.y !== null) {
+                      label += context.parsed.y;
+                    }
+                    return label;
                   }
-                  if (context.parsed.y !== null) {
-                    label += context.parsed.y;
-                  }
-                  return label;
                 }
               }
             }

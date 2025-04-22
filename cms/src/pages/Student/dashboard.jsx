@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import StudentNavbar from "../ui/studentnavbar";
+import StudentNavbar from "../ui/Studentnavbar";
 import { getStudentForms } from "../../firebase/firestoreService";
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';

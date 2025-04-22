@@ -1,6 +1,7 @@
 // src/firebase/firestoreService.js
 
 import { db } from './firebase-config';
+// At the top of firestoreService.js, add Timestamp to your imports
 import { 
   collection, 
   addDoc, 
@@ -12,7 +13,9 @@ import {
   where, 
   orderBy, 
   limit, 
-  serverTimestamp 
+  serverTimestamp,
+  Timestamp, // Add this import
+  deleteDoc  // Also add this since you use it in cleanupOldNotifications
 } from 'firebase/firestore';
 /**
  * Submits a student interview form to Firestore.
