@@ -535,7 +535,7 @@ const handleRemarkChange = async (formId, newRemark, followUpDate = null, sessio
         <h1 className="text-2xl font-bold mb-6">Non-Referral</h1>
         <div className="bg-white shadow-md rounded-lg overflow-hidden">
           <table className="min-w-full bg-white">
-            <thead className="bg-gray-100 border-b">
+            <thead className="bg-[#3A0323] border-b text-white">
               <tr>
                 <th className="text-left py-3 px-4">Name</th>
                 <th className="text-left py-3 px-4">Course</th>
@@ -608,10 +608,10 @@ const handleRemarkChange = async (formId, newRemark, followUpDate = null, sessio
       </div>
 
       <div className="max-w-8xl mx-auto px-6 pt-12">
-        <h1 className="text-2xl font-bold mb-4">Referral</h1>
+        <h1 className="text-2xl font-bold mb-6">Non-Referral</h1>
         <div className="bg-white shadow-md rounded-lg overflow-hidden">
           <table className="min-w-full bg-white">
-            <thead className="bg-gray-100 border-b">
+          <thead className="bg-[#3A0323] border-b text-white">
               <tr>
                 <th className="text-left py-3 px-4">Name</th>
                 <th className="text-left py-3 px-4">Course</th>

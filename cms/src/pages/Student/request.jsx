@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, forwardRef } from "react"; // Add forwardRef import here
 import { useNavigate } from "react-router-dom";
 import StudentNavbar from "../ui/studentnavbar";
-import { submitStudentInterviewForm } from '../../firebase/firestoreService';
-
+import { submitStudentInterviewForm, getUnavailableDates } from '../../firebase/firestoreService';
+import DatePicker from 'react-datepicker';
+import "react-datepicker/dist/react-datepicker.css";
 export default function Request() {
     const navigate = useNavigate();
     const [step, setStep] = useState(0);
@@ -33,6 +34,9 @@ export default function Request() {
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState(null);
+    const [unavailableDates, setUnavailableDates] = useState([]);
+    const [isLoadingDates, setIsLoadingDates] = useState(true);
+    const [dateError, setDateError] = useState('');
 
     const steps = [
         { label: "Consent", progress: 10 },
@@ -41,6 +45,41 @@ export default function Request() {
         { label: "Additional Information", progress: 75 },
         { label: "Concern", progress: 100 },
     ];
+
+    useEffect(() => {
+      // Fetch unavailable dates when component mounts
+      const fetchUnavailableDates = async () => {
+          try {
+              setIsLoadingDates(true);
+              const result = await getUnavailableDates();
+              
+              if (result.success) {
+                  // Store just the date strings in YYYY-MM-DD format
+                  const dateStrings = result.dates.map(item => item.date);
+                  setUnavailableDates(dateStrings);
+                  console.log("Unavailable dates loaded:", dateStrings);
+              } else {
+                  console.error("Failed to fetch unavailable dates:", result.error);
+              }
+          } catch (error) {
+              console.error("Error fetching unavailable dates:", error);
+          } finally {
+              setIsLoadingDates(false);
+          }
+      };
+  
+      fetchUnavailableDates();
+  }, []);
+  
+     
+
+    // Function to check if a date is unavailable
+
+    // Function to get min date (today)
+    const getMinDate = () => {
+      const today = new Date();
+      return today.toISOString().split('T')[0];
+    };
 
     const handleCheckboxChange = (category, value) => {
         const currentValues = formData.areasOfConcern[category];
@@ -55,10 +94,91 @@ export default function Request() {
         });
     };
 
-    const nextStep = () => {
-        if (step === 0 && !formData.consentGiven) return;
-        setStep(step + 1);
+    // Function to check if a date is unavailable
+      // Function to check if a date is unavailable
+    const CustomDateInput = forwardRef(({ value, onClick, placeholder }, ref) => (
+        <button
+            type="button"
+            className="w-full p-2 border border-gray-300 rounded-md text-left bg-white"
+            onClick={onClick}
+            ref={ref}
+        >
+            {value || placeholder || "Select a date"}
+        </button>
+    ));
+    
+    CustomDateInput.displayName = "CustomDateInput";
+    
+    // Function to check if a date is unavailable
+    const isDateUnavailable = (date) => {
+        if (!date || unavailableDates.length === 0) return false;
+        
+        const dateStr = date.toISOString().split('T')[0];
+        return unavailableDates.includes(dateStr);
     };
+    
+    // Function to filter out unavailable dates for the date picker
+    const filterAvailableDates = (date) => {
+        // Don't allow dates in the past
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        if (date < today) {
+            return false;
+        }
+        
+        // Don't allow unavailable dates
+        return !isDateUnavailable(date);
+    };
+    // Update your nextStep function to include console logs for debugging
+const nextStep = () => {
+  console.log("nextStep called, current step:", step);
+  
+  // For step 0, check if consent is given
+  if (step === 0 && !formData.consentGiven) {
+      console.log("Consent not given, staying on step 0");
+      return;
+  }
+  
+  // For step 1, validate the date if one has been entered
+  if (step === 1) {
+      console.log("Validating step 1 data");
+      // Check if required fields are filled
+      if (!formData.studentName) {
+          setError("Please enter your name");
+          console.log("Name missing, staying on step 1");
+          return;
+      }
+      
+      if (!formData.dateTime) {
+          setDateError("Please select a date and time for your counseling session");
+          setError("Please select a date and time for your counseling session");
+          console.log("Date/time missing, staying on step 1");
+          return;
+      }
+      
+      // Check if the selected date is unavailable
+      const dateStr = formData.dateTime.split('T')[0];
+      console.log("Selected date:", dateStr);
+      console.log("Unavailable dates:", unavailableDates);
+      
+      if (unavailableDates.includes(dateStr)) {
+          setDateError("The selected date is not available for counseling. Please select another date.");
+          setError("The selected date is not available for counseling. Please select another date.");
+          console.log("Date is unavailable, staying on step 1");
+          return;
+      }
+      
+      // Clear any previous errors
+      setDateError('');
+      setError(null);
+      console.log("Validation passed, proceeding to step 2");
+  }
+  
+  // If all validations pass, proceed to next step
+  setStep(step + 1);
+  console.log("Step advanced to:", step + 1);
+};
 
     const prevStep = () => {
         if (step > 0) setStep(step - 1);
@@ -140,26 +260,100 @@ export default function Request() {
                     </div>
                 )}
 
-                {step === 1 && (
-                    <div>
-                      <label className="block mb-2 font-semibold">Name</label>
-                      <input type="text" name="studentName" value={formData.studentName} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
-                      <label className="block mb-2 font-semibold">Date/Time</label>
-                      <input type="datetime-local" name="dateTime" value={formData.dateTime} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
-                      <label className="block mb-2 font-semibold">Date of Birth</label>
-                      <input type="date" name="dateOfBirth" value={formData.dateOfBirth} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
-                      <label className="block mb-2 font-semibold">Contact No.</label>
-                      <input type="text" name="contactNo" value={formData.contactNo} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
-                      <label className="block mb-2 font-semibold">Course/Yr. & Section</label>
-                      <input type="text" name="courseYearSection" value={formData.courseYearSection} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
-                      <label className="block mb-2 font-semibold">Age/Sex</label>
-                      <input type="text" name="ageSex" value={formData.ageSex} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
-                      <label className="block mb-2 font-semibold">Present Address</label>
-                      <input type="text" name="presentAddress" value={formData.presentAddress} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
-                      <label className="block mb-2 font-semibold">Emergency Contact Person</label>
-                      <input type="text" name="emergencyContactPerson" value={formData.emergencyContactPerson} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
-                      <label className="block mb-2 font-semibold">Emergency Contact No.</label>
-                      <input type="text" name="emergencyContactNo" value={formData.emergencyContactNo} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
+{step === 1 && (
+        <div>
+            <label className="block mb-2 font-semibold">Name</label>
+            <input type="text" name="studentName" value={formData.studentName} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
+            
+            <label className="block mb-2 font-semibold">Date/Time</label>
+            <div className="mb-4">
+                {isLoadingDates ? (
+                    <p className="text-sm text-gray-500">Loading available dates...</p>
+                ) : (
+                    <>
+                        <div className="flex flex-col space-y-2">
+                            <div className="relative">
+                                <DatePicker
+                                    selected={formData.dateTime ? new Date(formData.dateTime) : null}
+                                    onChange={(date) => {
+                                        if (date) {
+                                            setDateError(''); // Clear any previous error
+                                            // Preserve the time if it exists, otherwise default to 9:00
+                                            const time = formData.dateTime ? formData.dateTime.split('T')[1] : '09:00';
+                                            const dateStr = date.toISOString().split('T')[0];
+                                            setFormData({
+                                                ...formData,
+                                                dateTime: `${dateStr}T${time}`
+                                            });
+                                        }
+                                    }}
+                                    filterDate={filterAvailableDates}
+                                    minDate={new Date()}
+                                    placeholderText="Select a date"
+                                    className="w-full p-2 border border-gray-300 rounded-md"
+                                    dateFormat="MMMM d, yyyy"
+                                    customInput={<CustomDateInput />}
+                                    dayClassName={date => {
+                                        // Add custom day styling
+                                        return isDateUnavailable(date) ? 
+                                            "bg-red-100 text-red-500 line-through" : 
+                                            undefined;
+                                    }}
+                                />
+                            </div>
+                            
+                            <input 
+                                type="time" 
+                                name="dateTimeTime"
+                                value={formData.dateTime ? formData.dateTime.split('T')[1] : ''}
+                                onChange={(e) => {
+                                    if (!formData.dateTime || !formData.dateTime.includes('T')) {
+                                        setDateError('Please select a date first');
+                                        return;
+                                    }
+                                    
+                                    const date = formData.dateTime.split('T')[0];
+                                    setFormData({ 
+                                        ...formData, 
+                                        dateTime: `${date}T${e.target.value}` 
+                                    });
+                                }}
+                                className="w-full p-2 border border-gray-300 rounded-md"
+                            />
+                        </div>
+                        
+                        {dateError && (
+                            <p className="text-red-500 text-sm mt-1">{dateError}</p>
+                        )}
+                        
+                        <p className="text-sm text-gray-500 mt-1">
+                            Note: Some dates are unavailable for counseling.
+                        </p>
+                    </>
+                )}
+            </div>
+            
+                        
+                        <label className="block mb-2 font-semibold">Date of Birth</label>
+                        <input type="date" name="dateOfBirth" value={formData.dateOfBirth} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
+                        
+                        <label className="block mb-2 font-semibold">Contact No.</label>
+                        <input type="text" name="contactNo" value={formData.contactNo} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
+                        
+                        <label className="block mb-2 font-semibold">Course/Yr. & Section</label>
+                        <input type="text" name="courseYearSection" value={formData.courseYearSection} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
+                        
+                        <label className="block mb-2 font-semibold">Age/Sex</label>
+                        <input type="text" name="ageSex" value={formData.ageSex} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
+                        
+                        <label className="block mb-2 font-semibold">Present Address</label>
+                        <input type="text" name="presentAddress" value={formData.presentAddress} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
+                        
+                        <label className="block mb-2 font-semibold">Emergency Contact Person</label>
+                        <input type="text" name="emergencyContactPerson" value={formData.emergencyContactPerson} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
+                        
+                        <label className="block mb-2 font-semibold">Emergency Contact No.</label>
+                        <input type="text" name="emergencyContactNo" value={formData.emergencyContactNo} onChange={handleChange} className="w-full p-2 border border-gray-300 rounded-md mb-4" />
                     </div>
                 )}
 

@@ -13,10 +13,12 @@ import {
   where, 
   orderBy, 
   limit, 
-  serverTimestamp,
-  Timestamp, // Add this import
-  deleteDoc  // Also add this since you use it in cleanupOldNotifications
+  serverTimestamp, 
+  Timestamp,
+  deleteDoc,
+  writeBatch// Add this import
 } from 'firebase/firestore';
+
 /**
  * Submits a student interview form to Firestore.
  * @param {Object} formData - The form data to be submitted.
@@ -362,6 +364,149 @@ export const getStudentForms = async (studentEmail) => {
   }
 };
 
+
+/**
+ * Sets dates as unavailable for counseling
+ * @param {Array} dates - Array of date strings in YYYY-MM-DD format
+ * @param {string} reason - Optional reason why dates are unavailable
+ * @returns {Object} - Success status or error message
+ */
+// In firestoreService.js
+export const setUnavailableDates = async (dates, reason = "") => {
+  console.log("setUnavailableDates called with:", dates, reason);
+  
+  try {
+    // Check if the user is an admin
+    const isAdmin = localStorage.getItem('userRole') === 'admin' && 
+                   localStorage.getItem('userEmail') === 'admin@gmail.com';
+    
+    if (!isAdmin) {
+      return { 
+        success: false, 
+        error: "Unauthorized access. Only administrators can set unavailable dates."
+      };
+    }
+
+    // Validate input
+    if (!Array.isArray(dates) || dates.length === 0) {
+      return { success: false, error: "At least one date must be provided" };
+    }
+
+    // Create batch for multiple operations
+    const batch = writeBatch(db);
+    
+    // Process each date
+    for (const dateStr of dates) {
+      if (!dateStr) continue;
+      
+      // Create a document ID based on the date for easy retrieval/updates
+      const docId = `unavailable_${dateStr}`;
+      const dateRef = doc(db, "unavailableDates", docId);
+      
+      batch.set(dateRef, {
+        date: dateStr,
+        reason: reason,
+        createdAt: new Date().toISOString(),
+        createdBy: localStorage.getItem('userEmail') || 'admin',
+      });
+    }
+    
+    // Commit the batch
+    await batch.commit();
+    console.log("Batch committed successfully");
+    
+    return { 
+      success: true, 
+      message: `Successfully marked ${dates.length} date(s) as unavailable`
+    };
+  } catch (error) {
+    console.error("Error setting unavailable dates:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Gets all unavailable dates
+ */
+export const getUnavailableDates = async () => {
+  console.log("getUnavailableDates called");
+  
+  try {
+    const querySnapshot = await getDocs(collection(db, "unavailableDates"));
+    console.log("Unavailable dates query result count:", querySnapshot.size);
+    
+    const unavailableDates = [];
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      
+      if (data && data.date) {
+        unavailableDates.push({
+          date: data.date,
+          reason: data.reason || ""
+        });
+      }
+    });
+    
+    console.log("Processed unavailable dates:", unavailableDates);
+    return { 
+      success: true, 
+      dates: unavailableDates
+    };
+  } catch (error) {
+    console.error("Error getting unavailable dates:", error);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Removes dates from the unavailable list
+ */
+export const removeUnavailableDates = async (dates) => {
+  console.log("removeUnavailableDates called with:", dates);
+  
+  try {
+    // Check if the user is an admin
+    const isAdmin = localStorage.getItem('userRole') === 'admin' && 
+                   localStorage.getItem('userEmail') === 'admin@gmail.com';
+    
+    if (!isAdmin) {
+      return { 
+        success: false, 
+        error: "Unauthorized access. Only administrators can update unavailable dates."
+      };
+    }
+
+    // Validate input
+    if (!Array.isArray(dates) || dates.length === 0) {
+      return { success: false, error: "At least one date must be provided" };
+    }
+
+    // Create batch for multiple operations
+    const batch = writeBatch(db);
+    
+    // Process each date
+    for (const dateStr of dates) {
+      if (!dateStr) continue;
+      
+      const docId = `unavailable_${dateStr}`;
+      const dateRef = doc(db, "unavailableDates", docId);
+      
+      batch.delete(dateRef);
+    }
+    
+    // Commit the batch
+    await batch.commit();
+    console.log("Batch deletion committed successfully");
+    
+    return { 
+      success: true, 
+      message: `Successfully removed ${dates.length} date(s) from unavailable list`
+    };
+  } catch (error) {
+    console.error("Error removing unavailable dates:", error);
+    return { success: false, error: error.message };
+  }
+};
 /**
  * Sends a notification to a specific user by creating a notification document in Firestore
  * @param {string} userId - The user ID to send notification to

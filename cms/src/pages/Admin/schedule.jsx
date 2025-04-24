@@ -1,7 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import AdminNavbar from '../ui/adminnavbar';
-import { getStudentInterviewForms } from '../../firebase/firestoreService';
-import { addMonths, subMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, getDay, isSameDay } from 'date-fns';
+import {
+  getStudentInterviewForms,
+  getUnavailableDates,
+  setUnavailableDates,
+  removeUnavailableDates,
+} from '../../firebase/firestoreService';
+import UnavailableDatesModal from '../ui/UnavailableDatesModal.jsx';
+import {
+  addMonths,
+  subMonths,
+  format,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  isSameMonth,
+  isToday,
+  getDay,
+  isSameDay,
+} from 'date-fns';
+
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -13,11 +31,21 @@ function Schedule() {
   const [selectedSession, setSelectedSession] = useState(null);
   const [allSessions, setAllSessions] = useState([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [unavailableDates, setUnavailableDates] = useState([]);
+  const [showUnavailableModal, setShowUnavailableModal] = useState(false);
+  const [selectedUnavailableDates, setSelectedUnavailableDates] = useState([]);
+  const [unavailableReason, setUnavailableReason] = useState('');
+  const [unavailableMode, setUnavailableMode] = useState('add'); // 'add' or 'remove'
+  const [processingUnavailable, setProcessingUnavailable] = useState(false);
+  const isValidDate = (date) => {
+    return date instanceof Date && !isNaN(date.getTime());
+  };
 
   const formattedDate = format(date, "EEEE, MMMM d, yyyy");
 
   useEffect(() => {
     fetchSessions();
+    fetchUnavailableDates();
   }, []);
 
   useEffect(() => {
@@ -61,6 +89,150 @@ function Schedule() {
       toast.error("Failed to load sessions: " + error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUnavailableDates = async () => {
+    try {
+      const result = await getUnavailableDates();
+      console.log("getUnavailableDates result:", result);
+      
+      if (result && result.success && Array.isArray(result.dates)) {
+        // Convert string dates to Date objects
+        const dateObjects = result.dates.map(item => {
+          try {
+            if (!item || !item.date) return null;
+            
+            return {
+              date: new Date(item.date),
+              reason: item.reason || ""
+            };
+          } catch (err) {
+            console.warn("Error parsing date:", err);
+            return null;
+          }
+        }).filter(item => item !== null && isValidDate(item.date));
+        
+        setUnavailableDates(dateObjects);
+      } else {
+        console.error("Failed to fetch unavailable dates:", result?.error || "Unknown error");
+      }
+    } catch (error) {
+      console.error("Error in fetchUnavailableDates:", error);
+    }
+  };
+
+ 
+  const formatSafely = (date, formatString) => {
+    try {
+      if (!isValidDate(date)) {
+        console.warn("Invalid date passed to formatSafely:", date);
+        return "Invalid Date";
+      }
+      return format(date, formatString);
+    } catch (error) {
+      console.error("Error formatting date:", error, "date:", date, "format:", formatString);
+      return "Format Error";
+    }
+  };
+  
+  // Then modify your isDateUnavailable function
+  const isDateUnavailable = (day) => {
+    if (!day || !isValidDate(day)) return false;
+    if (!Array.isArray(unavailableDates) || unavailableDates.length === 0) return false;
+    
+    return unavailableDates.some(item => {
+      if (!item || !item.date || !isValidDate(item.date)) return false;
+      return isSameDay(item.date, day);
+    });
+  };
+
+  const handleMarkUnavailable = async () => {
+    if (selectedUnavailableDates.length === 0) {
+      toast.warning("Please select at least one date");
+      return;
+    }
+
+    setProcessingUnavailable(true);
+    try {
+      // Make sure setUnavailableDates is properly imported
+      if (typeof setUnavailableDates !== 'function') {
+        console.error("setUnavailableDates is not a function. Check your imports.");
+        toast.error("System error: Function not available");
+        return;
+      }
+      
+      // Safely format dates
+      const dateStrings = [];
+      for (const date of selectedUnavailableDates) {
+        try {
+          if (!isValidDate(date)) continue;
+          dateStrings.push(formatSafely(date, 'yyyy-MM-dd'));
+        } catch (err) {
+          console.warn("Error formatting date:", err);
+        }
+      }
+      
+      if (dateStrings.length === 0) {
+        toast.error("No valid dates selected");
+        return;
+      }
+      
+      console.log("Calling setUnavailableDates with:", dateStrings, unavailableReason);
+      const result = await setUnavailableDates(dateStrings, unavailableReason);
+      console.log("setUnavailableDates result:", result); // Debug log
+      
+      if (!result) {
+        console.error("setUnavailableDates returned undefined");
+        toast.error("An error occurred. Please check the console for details.");
+        return;
+      }
+      
+      if (result.success) {
+        toast.success(result.message || "Dates marked as unavailable");
+        setSelectedUnavailableDates([]);
+        setUnavailableReason('');
+        fetchUnavailableDates(); // Refresh the list
+        setShowUnavailableModal(false);
+      } else {
+        toast.error(result.error || "Failed to mark dates as unavailable");
+      }
+    } catch (error) {
+      console.error("Error marking dates as unavailable:", error);
+      toast.error("An error occurred: " + error.message);
+    } finally {
+      setProcessingUnavailable(false);
+    }
+  };
+
+  const handleRemoveUnavailable = async () => {
+    if (selectedUnavailableDates.length === 0) {
+      toast.warning("Please select at least one date to remove");
+      return;
+    }
+
+    setProcessingUnavailable(true);
+    try {
+      // Convert Date objects to YYYY-MM-DD format
+      const dateStrings = selectedUnavailableDates.map(date => 
+        format(date, 'yyyy-MM-dd')
+      );
+      
+      const result = await removeUnavailableDates(dateStrings);
+      
+      if (result.success) {
+        toast.success(result.message);
+        setSelectedUnavailableDates([]);
+        fetchUnavailableDates(); // Refresh the list
+        setShowUnavailableModal(false);
+      } else {
+        toast.error(`Failed to remove unavailable dates: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error removing unavailable dates:", error);
+      toast.error("An error occurred while removing unavailable dates");
+    } finally {
+      setProcessingUnavailable(false);
     }
   };
 
@@ -229,6 +401,30 @@ function Schedule() {
       return acc;
     }, {});
     
+    // Helper function to check if a date is unavailable
+    const isDateUnavailable = (day) => {
+      if (!day) return false;
+      
+      try {
+        const dayString = format(day, 'yyyy-MM-dd');
+        
+        return unavailableDates.some(item => {
+          // Make sure item.date is a valid date before formatting
+          if (!(item.date instanceof Date) || isNaN(item.date.getTime())) {
+            console.log('Invalid date in unavailableDates:', item);
+            return false;
+          }
+          
+          const unavailableDateString = format(item.date, 'yyyy-MM-dd');
+          return dayString === unavailableDateString;
+        });
+      } catch (error) {
+        console.error('Error in isDateUnavailable:', error, 'day:', day);
+        return false; // Return false on error to prevent breaking the UI
+      }
+    };
+    
+    
     // Create rows for each week
     Object.values(weeks).forEach((week, weekIndex) => {
       const weekNumber = startingWeekNumber + weekIndex;
@@ -254,44 +450,45 @@ function Schedule() {
         const isCurrentMonth = day ? isSameMonth(day, currentMonth) : false;
         const isCurrentDay = day ? isToday(day) : false;
         const isSelected = day ? isSameDay(day, date) : false;
+        const isUnavailable = isDateUnavailable(day);
         
         // Check if this day has sessions (including follow-ups)
-   
-          const hasSession = day && allSessions.some(session => {
-            // For follow-up sessions, only show dot on the follow-up date
-            if (session.remarks === 'Follow up' && session.followUpDate) {
-              try {
-                const followUpDate = new Date(session.followUpDate);
-                return isSameDay(followUpDate, day);
-              } catch (e) {
-                console.error("Error parsing followUpDate:", e);
-                return false;
-              }
+        const hasSession = day && allSessions.some(session => {
+          // For follow-up sessions, only show dot on the follow-up date
+          if (session.remarks === 'Follow up' && session.followUpDate) {
+            try {
+              const followUpDate = new Date(session.followUpDate);
+              return isSameDay(followUpDate, day);
+            } catch (e) {
+              console.error("Error parsing followUpDate:", e);
+              return false;
             }
-            
-            // For non-follow-up sessions:
-            
-            // Check regular session dates
-            if (session.dateTime) {
-              try {
-                const sessionDate = new Date(session.dateTime);
-                return isSameDay(sessionDate, day);
-              } catch (e) {
-                console.error("Error parsing dateTime:", e);
-              }
+          }
+          
+          // For non-follow-up sessions:
+          
+          // Check regular session dates
+          if (session.dateTime) {
+            try {
+              const sessionDate = new Date(session.dateTime);
+              return isSameDay(sessionDate, day);
+            } catch (e) {
+              console.error("Error parsing dateTime:", e);
             }
-            
-            if (session.submissionDate) {
-              try {
-                const submissionDate = new Date(session.submissionDate);
-                return isSameDay(submissionDate, day);
-              } catch (e) {
-                console.error("Error parsing submissionDate:", e);
-              }
+          }
+          
+          if (session.submissionDate) {
+            try {
+              const submissionDate = new Date(session.submissionDate);
+              return isSameDay(submissionDate, day);
+            } catch (e) {
+              console.error("Error parsing submissionDate:", e);
             }
-            
-            return false;
-          });
+          }
+          
+          return false;
+        });
+        
         daysInWeek.push(
           <div
             key={i}
@@ -299,14 +496,22 @@ function Schedule() {
             className={`text-center py-3 cursor-pointer relative ${
               !isCurrentMonth ? "text-gray-300" : 
               isSelected ? "font-bold" : 
-              isCurrentDay ? "text-red-500 font-bold" : "text-gray-900"
+              isCurrentDay ? "text-red-500 font-bold" : 
+              isUnavailable ? "text-red-400 line-through" : "text-gray-900"
             }`}
           >
             <span className={`${isSelected ? "bg-red-500 text-white rounded-full w-7 h-7 flex items-center justify-center mx-auto" : ""}`}>
               {formattedDate}
             </span>
+            
+            {/* Session indicator */}
             {hasSession && (
-              <span className="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-red-500 rounded-full"></span>
+              <span className="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-blue-500 rounded-full"></span>
+            )}
+            
+            {/* Unavailable indicator */}
+            {isUnavailable && (
+              <span className="absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-red-500 rounded-full ml-2"></span>
             )}
           </div>
         );
@@ -341,7 +546,20 @@ function Schedule() {
       />
 
       <div className="max-w-7xl mx-auto mt-8 px-4 sm:px-6 lg:px-8">
-        <h1 className="text-3xl font-bold mb-8">Admin Schedule</h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold">Admin Schedule</h1>
+          <button
+            onClick={() => {
+              setShowUnavailableModal(true);
+              setSelectedUnavailableDates([]);
+              setUnavailableReason('');
+              setUnavailableMode('add');
+            }}
+            className="px-4 py-2 bg-[#3B021F] text-white rounded-md hover:bg-[#2a0114] transition-colors"
+          >
+            Manage Unavailable Dates
+          </button>
+        </div>
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6">
@@ -380,6 +598,24 @@ function Schedule() {
               {renderHeader()}
               {renderDays()}
               {renderCells()}
+            </div>
+            
+            {/* Calendar Legend */}
+            <div className="mt-4 text-xs text-gray-600 flex flex-wrap gap-4">
+              <div className="flex items-center">
+                <span className="w-2 h-2 bg-blue-500 rounded-full mr-1"></span>
+                <span>Sessions Scheduled</span>
+              </div>
+              <div className="flex items-center">
+                <span className="w-2 h-2 bg-red-500 rounded-full mr-1"></span>
+                <span>Date Unavailable</span>
+              </div>
+              <div className="flex items-center">
+                <span className="w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-[8px] mr-1">
+                  {format(new Date(), 'd')}
+                </span>
+                <span>Selected Date</span>
+              </div>
             </div>
           </div>
 
@@ -481,6 +717,14 @@ function Schedule() {
           </div>
         </div>
       </div>
+      <UnavailableDatesModal
+  showModal={showUnavailableModal}
+  onClose={() => setShowUnavailableModal(false)}
+  unavailableDates={unavailableDates}
+  onDatesUpdated={fetchUnavailableDates}
+  isValidDate={isValidDate}
+/>
+      
     </div>
   );
 }

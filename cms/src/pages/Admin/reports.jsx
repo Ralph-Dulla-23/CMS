@@ -126,22 +126,25 @@ function Reports() {
         <h1 className="text-3xl font-bold mb-6">Counseling Reports</h1>
 
         {/* Filters */}
-        <div className="flex justify-end space-x-4 mb-8">
-          <Dropdown
-            value={selectedTimeframe}
-            options={timeframeOptions}
-            onChange={(e) => setSelectedTimeframe(e.value)}
-            placeholder="Select Timeframe"
-            className="w-full md:w-48"
-          />
-          <Dropdown
-            value={selectedCollege}
-            options={collegeOptions}
-            onChange={(e) => setSelectedCollege(e.value)}
-            placeholder="Select a College"
-            className="w-full md:w-48"
-          />
-        </div>
+  <div className="flex justify-end space-x-4 mb-8">
+    <Dropdown
+      value={selectedTimeframe}
+      options={timeframeOptions}
+      onChange={(e) => setSelectedTimeframe(e.value)}
+      placeholder="Select Timeframe"
+      className="w-48 custom-dropdown"
+      dropdownIcon="pi pi-chevron-down"
+    />
+    
+    <Dropdown
+      value={selectedCollege}
+      options={collegeOptions}
+      onChange={(e) => setSelectedCollege(e.value)}
+      placeholder="Select a College"
+      className="w-48 custom-dropdown"
+      dropdownIcon="pi pi-chevron-down"
+    />
+  </div>
 
         {loading ? (
           <div className="flex justify-center items-center h-64">
